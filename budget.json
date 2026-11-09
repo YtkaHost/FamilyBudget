@@ -1,0 +1,41 @@
+{
+  "Categories": [
+    {
+      "Id": 1,
+      "Name": "Їжа",
+      "Type": "Expense"
+    },
+    {
+      "Id": 2,
+      "Name": "Зарплата",
+      "Type": "Income"
+    },
+    {
+      "Id": 3,
+      "Name": "Транспорт",
+      "Type": "Expense"
+    },
+    {
+      "Id": 4,
+      "Name": "Накопичення",
+      "Type": "Expense"
+    }
+  ],
+  "Users": [
+    {
+      "Id": 1,
+      "Name": "Перший",
+      "FamilyRole": "Father"
+    }
+  ],
+  "Transactions": [
+    {
+      "Id": 1,
+      "CategoryId": 1,
+      "UserId": 1,
+      "Amount": 5000,
+      "Date": "2020-01-10T00:00:00",
+      "Description": ""
+    }
+  ]
+}
