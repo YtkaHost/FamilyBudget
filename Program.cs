@@ -1,4 +1,4 @@
-﻿using System.Text;
+using System.Text;
 using FamilyBudget.BusinessLogic;
 using FamilyBudget.Persistence;
 using FamilyBudget.Presentation;
@@ -9,7 +9,8 @@ Console.InputEncoding = Encoding.UTF8;
 const string FilePath = "budget.json";
 var storage = new BudgetStorage(FilePath);
 var service = new BudgetService(storage);
-var menu = new ConsoleMenu(service);
+var reports = new ReportService(service);
+var menu = new ConsoleMenu(service, reports);
 
 try
 {

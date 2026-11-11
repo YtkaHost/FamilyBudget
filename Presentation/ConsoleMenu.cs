@@ -7,10 +7,12 @@ namespace FamilyBudget.Presentation
     public class ConsoleMenu
     {
         private readonly BudgetService _service;
+        private readonly ReportService _reports;
 
-        public ConsoleMenu(BudgetService service)
+        public ConsoleMenu(BudgetService service, ReportService reports)
         {
             _service = service;
+            _reports = reports;
         }
 
         public void Run()
@@ -23,7 +25,7 @@ namespace FamilyBudget.Presentation
 
                 try
                 {
-                    int choice = ReadNumber("Ваш вибір", 0, 12);
+                    int choice = ReadNumber("Ваш вибір", 0, 13);
 
                     switch (choice)
                     {
@@ -39,6 +41,7 @@ namespace FamilyBudget.Presentation
                         case 10: DeleteTransaction(); break;
                         case 11: ShowBalance(); break;
                         case 12: FindTransactions(); break;
+                        case 13: ShowReport(); break;
                         case 0:
                             Console.WriteLine("До побачення!");
                             exit = true;
@@ -77,6 +80,7 @@ namespace FamilyBudget.Presentation
             Console.WriteLine("-- Інше --");
             Console.WriteLine("11. Показати баланс");
             Console.WriteLine("12. Знайти операції (за категорією, користувачем, періодом)");
+            Console.WriteLine("13. Звіт і статистика за період (день, тиждень, місяць, рік)");
             Console.WriteLine(" 0. Вийти");
         }
 
@@ -337,7 +341,89 @@ namespace FamilyBudget.Presentation
             Console.WriteLine("Знайдено операцій: " + found.Count);
         }
 
-        // ---------- Допоміжні методи введення ----------
+
+
+        private void ShowReport()
+        {
+            Console.WriteLine("Тип звіту: 1 - день, 2 - тиждень, 3 - місяць, 4 - рік");
+            int choice = ReadNumber("Ваш вибір", 1, 4);
+
+
+            var period = (ReportPeriod)(choice - 1);
+
+            DateTime date = ReadDate("Будь-яка дата з потрібного періоду", DateTime.Today);
+
+            Report report = _reports.BuildReport(period, date);
+            PrintReport(report);
+        }
+
+        private void PrintReport(Report r)
+        {
+            Console.WriteLine();
+            Console.WriteLine("===== ЗВІТ: " + PeriodToText(r.Period) + " " + r.From.ToString("dd.MM.yyyy")
+                + " - " + r.To.ToString("dd.MM.yyyy") + " =====");
+
+            if (r.OperationsCount == 0)
+            {
+                Console.WriteLine("За цей період операцій немає.");
+                Console.WriteLine("Баланс: " + Money(r.OpeningBalance));
+                return;
+            }
+
+            Console.WriteLine("Кількість операцій: " + r.OperationsCount);
+            Console.WriteLine("Доходи:             " + Money(r.TotalIncome));
+            Console.WriteLine("Витрати:            " + Money(r.TotalExpense));
+            Console.WriteLine("Різниця за період:  " + Money(r.TotalIncome - r.TotalExpense));
+            Console.WriteLine("Баланс на початок:  " + Money(r.OpeningBalance));
+            Console.WriteLine("Баланс на кінець:   " + Money(r.ClosingBalance));
+
+            Console.WriteLine();
+            Console.WriteLine("-- Витрати за категоріями --");
+            PrintShares(r.ExpenseShares);
+
+            Console.WriteLine();
+            Console.WriteLine("-- Доходи за категоріями --");
+            PrintShares(r.IncomeShares);
+
+            Console.WriteLine();
+            Console.WriteLine(r.Period == ReportPeriod.Year
+                ? "-- Динаміка балансу (по місяцях) --"
+                : "-- Динаміка балансу (по днях) --");
+            Console.WriteLine($"{"Дата",-10} {"Доходи",10} {"Витрати",10} {"Баланс",11}");
+            foreach (BalancePoint p in r.BalanceDynamics)
+            {
+                string date = r.Period == ReportPeriod.Year ? p.Date.ToString("MM.yyyy") : p.Date.ToString("dd.MM.yyyy");
+                Console.WriteLine($"{date,-10} {Money(p.Income),10} {Money(p.Expense),10} {Money(p.Balance),11}");
+            }
+
+            Console.WriteLine();
+            Console.WriteLine("-- Середні витрати (днів у розрахунку: " + r.Days + ") --");
+            Console.WriteLine("За день:    " + Money(r.AverageExpensePerDay));
+            Console.WriteLine("За тиждень: " + Money(r.AverageExpensePerWeek));
+
+            Console.WriteLine();
+            Console.WriteLine("-- Найбільші витрати --");
+            if (r.LargestExpenses.Count == 0)
+                Console.WriteLine("Витрат за цей період немає.");
+            else
+                PrintTransactions(r.LargestExpenses);
+        }
+
+        private void PrintShares(List<CategoryShare> shares)
+        {
+            if (shares.Count == 0)
+            {
+                Console.WriteLine("Немає.");
+                return;
+            }
+
+            Console.WriteLine($"{"Категорія",-15} {"Сума",10} {"Частка",7}");
+            foreach (CategoryShare s in shares)
+                Console.WriteLine($"{s.CategoryName,-15} {Money(s.Amount),10} {Percent(s.Percent),7}");
+        }
+
+
+
 
         private string ReadLine(string prompt)
         {
@@ -479,6 +565,7 @@ namespace FamilyBudget.Presentation
             return FamilyRole.Child;
         }
 
+
         private bool Confirm(string question)
         {
             string answer = ReadLine(question + " (т/н)").ToLower();
@@ -501,6 +588,24 @@ namespace FamilyBudget.Presentation
                 default: return "дитина";
             }
         }
+
+        private string PeriodToText(ReportPeriod period)
+        {
+            switch (period)
+            {
+                case ReportPeriod.Day: return "день";
+                case ReportPeriod.Week: return "тиждень";
+                case ReportPeriod.Month: return "місяць";
+                default: return "рік";
+            }
+        }
+
+
+        private string Percent(decimal percent)
+        {
+            return percent.ToString("F1", CultureInfo.InvariantCulture) + "%";
+        }
+
 
         private string Money(decimal amount)
         {
