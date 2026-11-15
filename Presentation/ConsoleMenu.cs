@@ -6,6 +6,10 @@ namespace FamilyBudget.Presentation
 {
     public class ConsoleMenu
     {
+        // Кольори виводу
+        private const ConsoleColor IncomeColor = ConsoleColor.Green;
+        private const ConsoleColor ExpenseColor = ConsoleColor.Red;
+
         private readonly BudgetService _service;
         private readonly ReportService _reports;
 
@@ -17,71 +21,136 @@ namespace FamilyBudget.Presentation
 
         public void Run()
         {
-            bool exit = false;
-
-            while (!exit)
+            try
             {
-                ShowMenu();
+
+                Menu("СІМЕЙНИЙ БЮДЖЕТ", "Вийти",
+                    new[] { "Категорії", "Користувачі", "Операції", "Баланс і звіти", "Плани бюджету", "Цілі накопичення" },
+                    new Action[] { CategoriesMenu, UsersMenu, TransactionsMenu, ReportsMenu, PlansMenu, GoalsMenu },
+                    false);
+            }
+            catch (EndOfStreamException)
+            {
+                
+            }
+
+            Console.WriteLine("До побачення!");
+        }
+
+        private void Menu(string title, string backText, string[] items, Action[] actions, bool pauseAfterAction)
+        {
+            while (true)
+            {
+                Console.WriteLine();
+                Console.WriteLine("===== " + title + " =====");
+                for (int i = 0; i < items.Length; i++)
+                    Console.WriteLine((i + 1) + ". " + items[i]);
+                Console.WriteLine("0. " + backText);
+
+                int choice = ReadNumber("Ваш вибір", 0, items.Length);
+
+                if (choice == 0)
+                    return;
 
                 try
                 {
-                    int choice = ReadNumber("Ваш вибір", 0, 13);
-
-                    switch (choice)
-                    {
-                        case 1: AddCategory(); break;
-                        case 2: ShowCategories(); break;
-                        case 3: RenameCategory(); break;
-                        case 4: DeleteCategory(); break;
-                        case 5: AddUser(); break;
-                        case 6: ShowUsers(); break;
-                        case 7: AddTransaction(); break;
-                        case 8: ShowTransactions(); break;
-                        case 9: EditTransaction(); break;
-                        case 10: DeleteTransaction(); break;
-                        case 11: ShowBalance(); break;
-                        case 12: FindTransactions(); break;
-                        case 13: ShowReport(); break;
-                        case 0:
-                            Console.WriteLine("До побачення!");
-                            exit = true;
-                            break;
-                    }
+                    actions[choice - 1]();
                 }
                 catch (EndOfStreamException)
                 {
-                    // Введення закінчилось (наприклад, Ctrl+Z) - виходимо з програми
-                    exit = true;
+                    throw;
                 }
                 catch (Exception ex)
                 {
                     Console.WriteLine("Помилка: " + ex.Message);
                 }
+
+                if (pauseAfterAction)
+                    WaitForEnter();
             }
         }
 
-        private void ShowMenu()
+        // Зупиняє програму, поки користувач не натисне Enter
+        private void WaitForEnter()
         {
             Console.WriteLine();
-            Console.WriteLine("===== СІМЕЙНИЙ БЮДЖЕТ =====");
-            Console.WriteLine("-- Категорії --");
-            Console.WriteLine(" 1. Додати категорію");
-            Console.WriteLine(" 2. Показати категорії");
-            Console.WriteLine(" 3. Змінити назву категорії");
-            Console.WriteLine(" 4. Видалити категорію");
-            Console.WriteLine("-- Користувачі --");
-            Console.WriteLine(" 5. Додати користувача");
-            Console.WriteLine(" 6. Показати користувачів");
-            Console.WriteLine("-- Операції --");
-            Console.WriteLine(" 7. Додати операцію");
-            Console.WriteLine(" 8. Показати операції");
-            Console.WriteLine(" 9. Змінити операцію");
-            Console.WriteLine("10. Видалити операцію");
-            Console.WriteLine("-- Інше --");
-            Console.WriteLine("11. Показати баланс");
-            Console.WriteLine("12. Знайти операції (за категорією, користувачем, періодом)");
-            Console.WriteLine("13. Звіт і статистика за період (день, тиждень, місяць, рік)");
-            Console.WriteLine(" 0. Вийти");
+            Console.Write("Натисніть Enter, щоб продовжити...");
+
+            if (Console.ReadLine() == null)
+                throw new EndOfStreamException();
+        }
+
+        // ---------- Кольори ----------
+
+        // Колір для типу операції: доходи зелені, витрати червоні
+        private ConsoleColor ColorFor(TransactionType type)
+        {
+            return type == TransactionType.Income ? IncomeColor : ExpenseColor;
+        }
+
+        private void WriteColor(string text, ConsoleColor color)
+        {
+            Console.ForegroundColor = color;
+            Console.Write(text);
+            Console.ResetColor();
+        }
+
+        private void WriteLineColor(string text, ConsoleColor color)
+        {
+            Console.ForegroundColor = color;
+            Console.WriteLine(text);
+            Console.ResetColor();
+        }
+
+
+        private void CategoriesMenu()
+        {
+            Menu("КАТЕГОРІЇ", "Назад",
+                new[] { "Додати категорію", "Показати категорії", "Змінити назву категорії", "Видалити категорію" },
+                new Action[] { AddCategory, ShowCategories, RenameCategory, DeleteCategory },
+                true);
+        }
+
+        private void UsersMenu()
+        {
+            Menu("КОРИСТУВАЧІ", "Назад",
+                new[] { "Додати користувача", "Показати користувачів" },
+                new Action[] { AddUser, ShowUsers },
+                true);
+        }
+
+        private void TransactionsMenu()
+        {
+            Menu("ОПЕРАЦІЇ", "Назад",
+                new[] { "Додати операцію", "Показати операції", "Змінити операцію", "Видалити операцію",
+                        "Знайти операції (за категорією, користувачем, періодом)" },
+                new Action[] { AddTransaction, ShowTransactions, EditTransaction, DeleteTransaction, FindTransactions },
+                true);
+        }
+
+        private void ReportsMenu()
+        {
+            Menu("БАЛАНС І ЗВІТИ", "Назад",
+                new[] { "Показати баланс", "Звіт і статистика за період (день, тиждень, місяць, рік)" },
+                new Action[] { ShowBalance, ShowReport },
+                true);
+        }
+
+        private void PlansMenu()
+        {
+            Menu("ПЛАНИ БЮДЖЕТУ", "Назад",
+                new[] { "Додати план", "Показати плани", "Змінити суму плану", "Видалити план",
+                        "План і факт за місяць" },
+                new Action[] { AddPlan, ShowPlans, EditPlan, DeletePlan, ShowPlanVsActual },
+                true);
+        }
+
+        private void GoalsMenu()
+        {
+            Menu("ЦІЛІ НАКОПИЧЕННЯ", "Назад",
+                new[] { "Додати ціль", "Показати цілі", "Внести кошти в ціль", "Видалити ціль" },
+                new Action[] { AddGoal, ShowGoals, AddContribution, DeleteGoal },
+                true);
         }
 
         // ---------- Категорії ----------
@@ -158,7 +227,7 @@ namespace FamilyBudget.Presentation
         {
             Console.WriteLine("Id  Тип      Назва");
             foreach (Category c in categories)
-                Console.WriteLine($"{c.Id,2}  {TypeToText(c.Type),-8} {c.Name}");
+                WriteLineColor($"{c.Id,2}  {TypeToText(c.Type),-8} {c.Name}", ColorFor(c.Type));
         }
 
         // ---------- Користувачі ----------
@@ -292,8 +361,9 @@ namespace FamilyBudget.Presentation
             Console.WriteLine("Id  Дата        Тип      Категорія       Сума        Користувач  Опис");
             foreach (Transaction t in transactions)
             {
-                Console.WriteLine(
-                    $"{t.Id,2}  {t.Date:dd.MM.yyyy}  {TypeToText(t.Type),-8} {t.Category.Name,-15} {Money(t.Amount),10}  {t.User.Name,-10}  {t.Description}");
+                WriteLineColor(
+                    $"{t.Id,2}  {t.Date:dd.MM.yyyy}  {TypeToText(t.Type),-8} {t.Category.Name,-15} {Money(t.Amount),10}  {t.User.Name,-10}  {t.Description}",
+                    ColorFor(t.Type));
             }
         }
 
@@ -301,8 +371,8 @@ namespace FamilyBudget.Presentation
 
         private void ShowBalance()
         {
-            Console.WriteLine("Доходи:  " + Money(_service.GetTotalIncome()));
-            Console.WriteLine("Витрати: " + Money(_service.GetTotalExpense()));
+            WriteLineColor("Доходи:  " + Money(_service.GetTotalIncome()), IncomeColor);
+            WriteLineColor("Витрати: " + Money(_service.GetTotalExpense()), ExpenseColor);
             Console.WriteLine("Баланс:  " + Money(_service.GetBalance()));
         }
 
@@ -341,13 +411,12 @@ namespace FamilyBudget.Presentation
             Console.WriteLine("Знайдено операцій: " + found.Count);
         }
 
-
+        // ---------- Звіти і статистика ----------
 
         private void ShowReport()
         {
             Console.WriteLine("Тип звіту: 1 - день, 2 - тиждень, 3 - місяць, 4 - рік");
             int choice = ReadNumber("Ваш вибір", 1, 4);
-
 
             var period = (ReportPeriod)(choice - 1);
 
@@ -371,29 +440,37 @@ namespace FamilyBudget.Presentation
             }
 
             Console.WriteLine("Кількість операцій: " + r.OperationsCount);
-            Console.WriteLine("Доходи:             " + Money(r.TotalIncome));
-            Console.WriteLine("Витрати:            " + Money(r.TotalExpense));
+            WriteLineColor("Доходи:             " + Money(r.TotalIncome), IncomeColor);
+            WriteLineColor("Витрати:            " + Money(r.TotalExpense), ExpenseColor);
             Console.WriteLine("Різниця за період:  " + Money(r.TotalIncome - r.TotalExpense));
             Console.WriteLine("Баланс на початок:  " + Money(r.OpeningBalance));
             Console.WriteLine("Баланс на кінець:   " + Money(r.ClosingBalance));
 
             Console.WriteLine();
-            Console.WriteLine("-- Витрати за категоріями --");
-            PrintShares(r.ExpenseShares);
+            WriteLineColor("-- Витрати за категоріями --", ExpenseColor);
+            PrintShares(r.ExpenseShares, ExpenseColor);
 
             Console.WriteLine();
-            Console.WriteLine("-- Доходи за категоріями --");
-            PrintShares(r.IncomeShares);
+            WriteLineColor("-- Доходи за категоріями --", IncomeColor);
+            PrintShares(r.IncomeShares, IncomeColor);
 
             Console.WriteLine();
             Console.WriteLine(r.Period == ReportPeriod.Year
                 ? "-- Динаміка балансу (по місяцях) --"
                 : "-- Динаміка балансу (по днях) --");
-            Console.WriteLine($"{"Дата",-10} {"Доходи",10} {"Витрати",10} {"Баланс",11}");
+            Console.Write($"{"Дата",-10} ");
+            WriteColor($"{"Доходи",10}", IncomeColor);
+            Console.Write(" ");
+            WriteColor($"{"Витрати",10}", ExpenseColor);
+            Console.WriteLine($" {"Баланс",11}");
             foreach (BalancePoint p in r.BalanceDynamics)
             {
                 string date = r.Period == ReportPeriod.Year ? p.Date.ToString("MM.yyyy") : p.Date.ToString("dd.MM.yyyy");
-                Console.WriteLine($"{date,-10} {Money(p.Income),10} {Money(p.Expense),10} {Money(p.Balance),11}");
+                Console.Write($"{date,-10} ");
+                WriteColor($"{Money(p.Income),10}", IncomeColor);
+                Console.Write(" ");
+                WriteColor($"{Money(p.Expense),10}", ExpenseColor);
+                Console.WriteLine($" {Money(p.Balance),11}");
             }
 
             Console.WriteLine();
@@ -402,14 +479,14 @@ namespace FamilyBudget.Presentation
             Console.WriteLine("За тиждень: " + Money(r.AverageExpensePerWeek));
 
             Console.WriteLine();
-            Console.WriteLine("-- Найбільші витрати --");
+            WriteLineColor("-- Найбільші витрати --", ExpenseColor);
             if (r.LargestExpenses.Count == 0)
                 Console.WriteLine("Витрат за цей період немає.");
             else
                 PrintTransactions(r.LargestExpenses);
         }
 
-        private void PrintShares(List<CategoryShare> shares)
+        private void PrintShares(List<CategoryShare> shares, ConsoleColor color)
         {
             if (shares.Count == 0)
             {
@@ -419,11 +496,240 @@ namespace FamilyBudget.Presentation
 
             Console.WriteLine($"{"Категорія",-15} {"Сума",10} {"Частка",7}");
             foreach (CategoryShare s in shares)
-                Console.WriteLine($"{s.CategoryName,-15} {Money(s.Amount),10} {Percent(s.Percent),7}");
+                WriteLineColor($"{s.CategoryName,-15} {Money(s.Amount),10} {Percent(s.Percent),7}", color);
+        }
+
+        private void AddPlan()
+        {
+            // План складається лише для витрат, тому показуємо тільки категорії витрат
+            List<Category> categories = _service.GetCategories(TransactionType.Expense);
+
+            if (categories.Count == 0)
+            {
+                Console.WriteLine("Спочатку додайте хоча б одну категорію витрат.");
+                return;
+            }
+
+            PrintCategories(categories);
+            int categoryId = ReadNumber("Id категорії", 1, int.MaxValue);
+            int month = ReadNumber("Місяць (1-12)", 1, 12, DateTime.Today.Month);
+            int year = ReadNumber("Рік", 2000, 2100, DateTime.Today.Year);
+            decimal amount = ReadAmount("Планова сума");
+
+            BudgetPlan plan = _service.AddPlan(categoryId, year, month, amount);
+            Console.WriteLine("План додано (Id = " + plan.Id + ").");
+        }
+
+        private void ShowPlans()
+        {
+            List<BudgetPlan> plans = _service.GetPlans();
+
+            if (plans.Count == 0)
+            {
+                Console.WriteLine("Планів поки немає.");
+                return;
+            }
+
+            PrintPlans(plans);
+        }
+
+        private void EditPlan()
+        {
+            List<BudgetPlan> plans = _service.GetPlans();
+
+            if (plans.Count == 0)
+            {
+                Console.WriteLine("Планів поки немає.");
+                return;
+            }
+
+            PrintPlans(plans);
+            int id = ReadNumber("Id плану, який змінити", 1, int.MaxValue);
+            BudgetPlan plan = _service.GetPlan(id);
+
+            decimal amount = ReadAmount("Нова планова сума", plan.PlannedAmount);
+
+            _service.UpdatePlanAmount(id, amount);
+            Console.WriteLine("Суму плану змінено.");
+        }
+
+        private void DeletePlan()
+        {
+            List<BudgetPlan> plans = _service.GetPlans();
+
+            if (plans.Count == 0)
+            {
+                Console.WriteLine("Планів поки немає.");
+                return;
+            }
+
+            PrintPlans(plans);
+            int id = ReadNumber("Id плану, який видалити", 1, int.MaxValue);
+            _service.GetPlan(id);   // якщо Id не існує - тут буде помилка
+
+            if (!Confirm("Видалити план?"))
+            {
+                Console.WriteLine("Скасовано.");
+                return;
+            }
+
+            _service.DeletePlan(id);
+            Console.WriteLine("План видалено.");
+        }
+
+        private void PrintPlans(List<BudgetPlan> plans)
+        {
+            Console.WriteLine($"{"Id",2}  {"Місяць",-15} {"Категорія",-15} {"План",10}");
+
+            foreach (BudgetPlan p in plans.OrderBy(p => p.Year).ThenBy(p => p.Month).ThenBy(p => p.Id))
+                Console.WriteLine($"{p.Id,2}  {MonthToText(p.Year, p.Month),-15} {p.Category.Name,-15} {Money(p.PlannedAmount),10}");
+        }
+
+        private void ShowPlanVsActual()
+        {
+            int month = ReadNumber("Місяць (1-12)", 1, 12, DateTime.Today.Month);
+            int year = ReadNumber("Рік", 2000, 2100, DateTime.Today.Year);
+
+            List<PlanComparison> rows = _reports.ComparePlans(year, month);
+
+            Console.WriteLine();
+            Console.WriteLine("===== ПЛАН І ФАКТ: " + MonthToText(year, month) + " =====");
+
+            if (rows.Count == 0)
+            {
+                Console.WriteLine("На цей місяць планів немає.");
+            }
+            else
+            {
+                Console.WriteLine($"{"Категорія",-15} {"План",10} {"Факт",10} {"Різниця",10} {"Використано",12}");
+                foreach (PlanComparison c in rows)
+                {
+                    Console.WriteLine($"{c.Plan.Category.Name,-15} {Money(c.Plan.PlannedAmount),10} {Money(c.Actual),10} "
+                        + $"{Money(c.Difference),10} {Percent(c.UsedPercent),12}");
+                }
+
+                decimal totalPlan = rows.Sum(c => c.Plan.PlannedAmount);
+                decimal totalActual = rows.Sum(c => c.Actual);
+                Console.WriteLine($"{"Разом",-15} {Money(totalPlan),10} {Money(totalActual),10} {Money(totalPlan - totalActual),10}");
+                Console.WriteLine("Різниця = план - факт. Мінус означає, що ліміт перевищено.");
+            }
+
+            Console.WriteLine();
+            Console.WriteLine("-- Рекомендації --");
+            List<string> recommendations = _reports.GetRecommendations(year, month);
+
+            if (recommendations.Count == 0)
+            {
+                Console.WriteLine("Зауважень немає.");
+                return;
+            }
+
+            foreach (string text in recommendations)
+                Console.WriteLine("- " + text);
         }
 
 
+        private void AddGoal()
+        {
+            string name = ReadText("Назва цілі");
+            decimal target = ReadAmount("Сума, яку потрібно накопичити");
+            DateTime deadline = ReadDate("Термін", DateTime.Today.AddMonths(6));
 
+            SavingGoal goal = _service.AddSavingGoal(name, target, deadline);
+            Console.WriteLine("Ціль додано (Id = " + goal.Id + ").");
+        }
+
+        private void ShowGoals()
+        {
+            List<SavingGoal> goals = _service.GetSavingGoals();
+
+            if (goals.Count == 0)
+            {
+                Console.WriteLine("Цілей поки немає.");
+                return;
+            }
+
+            PrintGoals(goals);
+        }
+
+        private void AddContribution()
+        {
+            List<SavingGoal> goals = _service.GetSavingGoals();
+
+            if (goals.Count == 0)
+            {
+                Console.WriteLine("Цілей поки немає.");
+                return;
+            }
+
+            PrintGoals(goals);
+            int id = ReadNumber("Id цілі", 1, int.MaxValue);
+            _service.GetSavingGoal(id);
+            decimal amount = ReadAmount("Сума внеску");
+
+            SavingGoal goal = _service.AddContribution(id, amount);
+
+            Console.WriteLine("Внесок додано. Накопичено " + Money(goal.SavedAmount) + " із " + Money(goal.TargetAmount)
+                + " (" + Percent(goal.ProgressPercent) + ").");
+            if (goal.IsAchieved)
+                Console.WriteLine("Ціль досягнуто!");
+        }
+
+        private void DeleteGoal()
+        {
+            List<SavingGoal> goals = _service.GetSavingGoals();
+
+            if (goals.Count == 0)
+            {
+                Console.WriteLine("Цілей поки немає.");
+                return;
+            }
+
+            PrintGoals(goals);
+            int id = ReadNumber("Id цілі, яку видалити", 1, int.MaxValue);
+            SavingGoal goal = _service.GetSavingGoal(id);
+
+            if (!Confirm("Видалити ціль \"" + goal.Name + "\"?"))
+            {
+                Console.WriteLine("Скасовано.");
+                return;
+            }
+
+            _service.DeleteSavingGoal(id);
+            Console.WriteLine("Ціль видалено.");
+        }
+
+        private void PrintGoals(List<SavingGoal> goals)
+        {
+            Console.WriteLine($"{"Id",2}  {"Назва",-15} {"Ціль",10} {"Накопичено",11} {"Прогрес",8}  {"Термін",-10}  Стан");
+            foreach (SavingGoal g in goals)
+            {
+                Console.WriteLine($"{g.Id,2}  {g.Name,-15} {Money(g.TargetAmount),10} {Money(g.SavedAmount),11} "
+                    + $"{Percent(g.ProgressPercent),8}  {g.Deadline:dd.MM.yyyy}  {GoalStatus(g)}");
+            }
+        }
+
+        private string GoalStatus(SavingGoal goal)
+        {
+            if (goal.IsAchieved)
+                return "досягнуто";
+
+            if (goal.DaysLeft < 0)
+                return "термін минув";
+
+            if (goal.DaysLeft == 0)
+                return "термін сьогодні";
+
+            return "залишилось " + goal.DaysLeft + " дн.";
+        }
+
+        private string MonthToText(int year, int month)
+        {
+            string[] names = { "січень", "лютий", "березень", "квітень", "травень", "червень",
+                               "липень", "серпень", "вересень", "жовтень", "листопад", "грудень" };
+
+            return names[month - 1] + " " + year;
+        }
 
         private string ReadLine(string prompt)
         {
@@ -543,7 +849,10 @@ namespace FamilyBudget.Presentation
 
         private TransactionType ReadType()
         {
-            Console.WriteLine("Тип: 1 - дохід, 2 - витрата");
+            Console.Write("Тип: 1 - ");
+            WriteColor("дохід", IncomeColor);
+            Console.Write(", 2 - ");
+            WriteLineColor("витрата", ExpenseColor);
             int choice = ReadNumber("Ваш вибір", 1, 2);
 
             if (choice == 1)
@@ -564,7 +873,6 @@ namespace FamilyBudget.Presentation
 
             return FamilyRole.Child;
         }
-
 
         private bool Confirm(string question)
         {

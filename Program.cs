@@ -7,8 +7,9 @@ Console.OutputEncoding = Encoding.UTF8;
 Console.InputEncoding = Encoding.UTF8;
 
 const string FilePath = "budget.json";
-var storage = new BudgetStorage(FilePath);
-var service = new BudgetService(storage);
+var storage = new BudgetStorage();
+var fileStorage = new JsonFileStorage(FilePath);
+var service = new BudgetService(storage, fileStorage);
 var reports = new ReportService(service);
 var menu = new ConsoleMenu(service, reports);
 
@@ -27,6 +28,8 @@ catch (Exception ex)
 Console.WriteLine("Файл даних: " + Path.GetFullPath(FilePath));
 Console.WriteLine("Завантажено: категорій - " + service.GetCategories().Count
     + ", користувачів - " + service.GetUsers().Count
-    + ", операцій - " + service.GetTransactions().Count);
+    + ", операцій - " + service.GetTransactions().Count
+    + ", планів - " + service.GetPlans().Count
+    + ", цілей - " + service.GetSavingGoals().Count);
 
 menu.Run();

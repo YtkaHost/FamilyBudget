@@ -6,15 +6,17 @@ namespace FamilyBudget.BusinessLogic
     public class BudgetService
     {
         private readonly BudgetStorage _storage;
+        private readonly JsonFileStorage _fileStorage;
 
-        public BudgetService(BudgetStorage storage)
+        public BudgetService(BudgetStorage storage, JsonFileStorage fileStorage)
         {
             _storage = storage;
+            _fileStorage = fileStorage;
         }
 
         public void Load()
         {
-            _storage.Load();
+            _fileStorage.Load(_storage);
         }
 
         // ---------- Категорії ----------
@@ -34,6 +36,11 @@ namespace FamilyBudget.BusinessLogic
         public List<Category> GetCategories()
         {
             return _storage.GetAllCategories();
+        }
+
+        public List<Category> GetCategories(TransactionType type)
+        {
+            return _storage.GetAllCategories().Where(c => c.Type == type).ToList();
         }
 
         public Category GetCategory(int id)
@@ -66,6 +73,10 @@ namespace FamilyBudget.BusinessLogic
             bool isUsed = _storage.GetAllTransactions().Any(t => t.Category.Id == id);
             if (isUsed)
                 throw new InvalidOperationException("Не можна видалити категорію: є операції, що її використовують.");
+
+            bool hasPlan = _storage.GetAllPlans().Any(p => p.Category.Id == id);
+            if (hasPlan)
+                throw new InvalidOperationException("Не можна видалити категорію: для неї є план бюджету. Спочатку видаліть план.");
 
             _storage.RemoveCategory(category);
             SaveChanges();
@@ -149,6 +160,102 @@ namespace FamilyBudget.BusinessLogic
             SaveChanges();
         }
 
+        public BudgetPlan AddPlan(int categoryId, int year, int month, decimal plannedAmount)
+        {
+            Category category = GetCategory(categoryId);
+
+            var plan = new BudgetPlan(_storage.GetNextPlanId(), category, year, month, plannedAmount);
+
+            bool exists = _storage.GetAllPlans().Any(p =>
+                p.Category.Id == categoryId && p.Year == year && p.Month == month);
+            if (exists)
+                throw new InvalidOperationException("План для цієї категорії на цей місяць уже є. Змініть його суму.");
+
+            _storage.AddPlan(plan);
+            SaveChanges();
+            return plan;
+        }
+
+        public List<BudgetPlan> GetPlans()
+        {
+            return _storage.GetAllPlans();
+        }
+
+        public List<BudgetPlan> GetPlans(int year, int month)
+        {
+            return _storage.GetAllPlans().Where(p => p.Year == year && p.Month == month).ToList();
+        }
+
+        public BudgetPlan GetPlan(int id)
+        {
+            BudgetPlan? plan = _storage.GetAllPlans().FirstOrDefault(p => p.Id == id);
+
+            if (plan == null)
+                throw new InvalidOperationException("План з Id " + id + " не знайдено.");
+
+            return plan;
+        }
+
+        public void UpdatePlanAmount(int id, decimal newAmount)
+        {
+            BudgetPlan plan = GetPlan(id);
+            plan.PlannedAmount = newAmount;
+            SaveChanges();
+        }
+
+        public void DeletePlan(int id)
+        {
+            BudgetPlan plan = GetPlan(id);
+            _storage.RemovePlan(plan);
+            SaveChanges();
+        }
+
+
+        public SavingGoal AddSavingGoal(string name, decimal targetAmount, DateTime deadline)
+        {
+            if (deadline.Date < DateTime.Today)
+                throw new ArgumentException("Термін цілі не може бути в минулому.");
+
+            var goal = new SavingGoal(_storage.GetNextGoalId(), name, targetAmount, deadline, 0);
+            _storage.AddGoal(goal);
+            SaveChanges();
+            return goal;
+        }
+
+        public List<SavingGoal> GetSavingGoals()
+        {
+            return _storage.GetAllGoals();
+        }
+
+        public SavingGoal GetSavingGoal(int id)
+        {
+            SavingGoal? goal = _storage.GetAllGoals().FirstOrDefault(g => g.Id == id);
+
+            if (goal == null)
+                throw new InvalidOperationException("Ціль з Id " + id + " не знайдено.");
+
+            return goal;
+        }
+
+        public SavingGoal AddContribution(int goalId, decimal amount)
+        {
+            SavingGoal goal = GetSavingGoal(goalId);
+
+            if (amount <= 0)
+                throw new ArgumentException("Внесок має бути більшим за 0.");
+
+            goal.SavedAmount = goal.SavedAmount + amount;
+            SaveChanges();
+            return goal;
+        }
+
+        public void DeleteSavingGoal(int id)
+        {
+            SavingGoal goal = GetSavingGoal(id);
+            _storage.RemoveGoal(goal);
+            SaveChanges();
+        }
+
         public List<Transaction> FindTransactions(int? categoryId, int? userId, DateTime? dateFrom, DateTime? dateTo)
         {
             if (dateFrom != null && dateTo != null && dateFrom > dateTo)
@@ -204,7 +311,7 @@ namespace FamilyBudget.BusinessLogic
         {
             try
             {
-                _storage.Save();
+                _fileStorage.Save(_storage);
             }
             catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
             {

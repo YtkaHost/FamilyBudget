@@ -25,6 +25,13 @@ namespace FamilyBudget.BusinessLogic
         public decimal Balance { get; set; }
     }
 
+    public class PlanComparison
+    {
+        public BudgetPlan Plan { get; set; } = null!;
+        public decimal Actual { get; set; }
+        public decimal Difference => Plan.PlannedAmount - Actual;
+        public decimal UsedPercent => Math.Round(Actual * 100 / Plan.PlannedAmount, 1);
+    }
     public class Report
     {
         public ReportPeriod Period { get; set; }

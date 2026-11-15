@@ -1,34 +1,14 @@
-using System.Text.Encodings.Web;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using FamilyBudget.Models;
 
 namespace FamilyBudget.Persistence
 {
     public class BudgetStorage
     {
-        private static readonly JsonSerializerOptions _jsonOptions = CreateJsonOptions();
-
-        private readonly string _filePath;
         private readonly List<Category> _categories = new List<Category>();
         private readonly List<User> _users = new List<User>();
         private readonly List<Transaction> _transactions = new List<Transaction>();
-
-        public BudgetStorage(string filePath)
-        {
-            _filePath = filePath;
-        }
-
-        private static JsonSerializerOptions CreateJsonOptions()
-        {
-            var options = new JsonSerializerOptions
-            {
-                WriteIndented = true,
-                Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
-            };
-            options.Converters.Add(new JsonStringEnumConverter());
-            return options;
-        }
+        private readonly List<BudgetPlan> _plans = new List<BudgetPlan>();
+        private readonly List<SavingGoal> _goals = new List<SavingGoal>();
 
         // ---------- Категорії ----------
 
@@ -110,91 +90,65 @@ namespace FamilyBudget.Persistence
             return _transactions.Max(t => t.Id) + 1;
         }
 
-        // ---------- Збереження у файл ----------
+        // ---------- Плани бюджету ----------
 
-        // Перетворюємо моделі на прості дані (FileData.cs) і записуємо їх у JSON
-        public void Save()
+        public List<BudgetPlan> GetAllPlans()
         {
-            var data = new BudgetFileData();
-
-            foreach (Category c in _categories)
-                data.Categories.Add(new CategoryData { Id = c.Id, Name = c.Name, Type = c.Type });
-
-            foreach (User u in _users)
-                data.Users.Add(new UserData { Id = u.Id, Name = u.Name, FamilyRole = u.FamilyRole });
-
-            foreach (Transaction t in _transactions)
-            {
-                data.Transactions.Add(new TransactionData
-                {
-                    Id = t.Id,
-                    CategoryId = t.Category.Id,   // замість цілого об'єкта категорії пишемо лише її Id
-                    UserId = t.User.Id,
-                    Amount = t.Amount,
-                    Date = t.Date,
-                    Description = t.Description
-                });
-            }
-
-            string json = JsonSerializer.Serialize(data, _jsonOptions);
-            File.WriteAllText(_filePath, json);
+            return new List<BudgetPlan>(_plans);
         }
 
-        // ---------- Завантаження з файлу ----------
-
-        public void Load()
+        public void AddPlan(BudgetPlan plan)
         {
-            // Файлу ще немає (перший запуск) - це нормально, починаємо з порожніх списків
-            if (!File.Exists(_filePath))
-                return;
+            _plans.Add(plan);
+        }
 
-            string json = File.ReadAllText(_filePath);
-            BudgetFileData? data = JsonSerializer.Deserialize<BudgetFileData>(json, _jsonOptions);
+        public void RemovePlan(BudgetPlan plan)
+        {
+            _plans.Remove(plan);
+        }
 
-            if (data == null || data.Categories == null || data.Users == null || data.Transactions == null)
-                throw new InvalidDataException("Файл має неправильну структуру.");
+        public int GetNextPlanId()
+        {
+            if (_plans.Count == 0)
+                return 1;
 
-            var categories = new List<Category>();
-            foreach (CategoryData d in data.Categories)
-            {
-                if (categories.Any(c => c.Id == d.Id))
-                    throw new InvalidDataException("У файлі повторюється Id категорії: " + d.Id + ".");
+            return _plans.Max(p => p.Id) + 1;
+        }
 
-                categories.Add(new Category(d.Id, d.Name, d.Type));
-            }
+        // ---------- Цілі накопичення ----------
 
-            var users = new List<User>();
-            foreach (UserData d in data.Users)
-            {
-                if (users.Any(u => u.Id == d.Id))
-                    throw new InvalidDataException("У файлі повторюється Id користувача: " + d.Id + ".");
+        public List<SavingGoal> GetAllGoals()
+        {
+            return new List<SavingGoal>(_goals);
+        }
 
-                users.Add(new User(d.Id, d.Name, d.FamilyRole));
-            }
+        public void AddGoal(SavingGoal goal)
+        {
+            _goals.Add(goal);
+        }
 
-            var transactions = new List<Transaction>();
-            foreach (TransactionData d in data.Transactions)
-            {
-                if (transactions.Any(t => t.Id == d.Id))
-                    throw new InvalidDataException("У файлі повторюється Id операції: " + d.Id + ".");
+        public void RemoveGoal(SavingGoal goal)
+        {
+            _goals.Remove(goal);
+        }
 
-                Category? category = categories.FirstOrDefault(c => c.Id == d.CategoryId);
-                if (category == null)
-                    throw new InvalidDataException("Операція " + d.Id + ": не знайдено категорію з Id " + d.CategoryId + ".");
+        public int GetNextGoalId()
+        {
+            if (_goals.Count == 0)
+                return 1;
 
-                User? user = users.FirstOrDefault(u => u.Id == d.UserId);
-                if (user == null)
-                    throw new InvalidDataException("Операція " + d.Id + ": не знайдено користувача з Id " + d.UserId + ".");
+            return _goals.Max(g => g.Id) + 1;
+        }
 
-                transactions.Add(new Transaction(d.Id, category, user, d.Amount, d.Date, d.Description));
-            }
+        // ---------- Очищення ----------
 
+        public void Clear()
+        {
             _categories.Clear();
-            _categories.AddRange(categories);
             _users.Clear();
-            _users.AddRange(users);
             _transactions.Clear();
-            _transactions.AddRange(transactions);
+            _plans.Clear();
+            _goals.Clear();
         }
     }
 }

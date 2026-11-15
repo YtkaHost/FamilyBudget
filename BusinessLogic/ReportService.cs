@@ -1,3 +1,4 @@
+using System.Globalization;
 using FamilyBudget.Models;
 
 namespace FamilyBudget.BusinessLogic
@@ -5,6 +6,7 @@ namespace FamilyBudget.BusinessLogic
     public class ReportService
     {
         private const int TopExpensesCount = 3;
+        private const decimal WarningPercent = 80;
         private readonly BudgetService _service;
 
         public ReportService(BudgetService service)
@@ -14,7 +16,6 @@ namespace FamilyBudget.BusinessLogic
 
         public Report BuildReport(ReportPeriod period, DateTime date)
         {
-
             if (date.Year < 2000 || date.Year > 2100)
                 throw new ArgumentException("Рік має бути від 2000 до 2100.");
 
@@ -60,6 +61,76 @@ namespace FamilyBudget.BusinessLogic
             return report;
         }
 
+        public List<PlanComparison> ComparePlans(int year, int month)
+        {
+            if (year < 2000 || year > 2100)
+                throw new ArgumentException("Рік має бути від 2000 до 2100.");
+            if (month < 1 || month > 12)
+                throw new ArgumentException("Місяць має бути від 1 до 12.");
+
+            DateTime first = new DateTime(year, month, 1);
+            DateTime last = first.AddMonths(1).AddDays(-1);
+
+            List<Transaction> monthTransactions = _service.FindTransactions(null, null, first, last);
+
+            var result = new List<PlanComparison>();
+            foreach (BudgetPlan plan in _service.GetPlans(year, month))
+            {
+                // План складається лише для витратних категорій, тому тип операцій перевіряти не треба
+                decimal actual = monthTransactions
+                    .Where(t => t.Category.Id == plan.Category.Id)
+                    .Sum(t => t.Amount);
+
+                var comparison = new PlanComparison();
+                comparison.Plan = plan;
+                comparison.Actual = actual;
+                result.Add(comparison);
+            }
+
+            return result;
+        }
+
+        public List<string> GetRecommendations(int year, int month)
+        {
+            var recommendations = new List<string>();
+
+            foreach (PlanComparison c in ComparePlans(year, month))
+            {
+                string name = c.Plan.Category.Name;
+                decimal planned = c.Plan.PlannedAmount;
+
+                if (c.Actual > planned)
+                {
+                    recommendations.Add("Перевищено ліміт у категорії «" + name + "»: витрачено " + Money(c.Actual)
+                        + " із " + Money(planned) + " (перевищення на " + Money(-c.Difference) + ").");
+                }
+                else if (c.UsedPercent >= WarningPercent)
+                {
+                    recommendations.Add("Увага: у категорії «" + name + "» використано " + Percent(c.UsedPercent)
+                        + " ліміту, залишилось " + Money(c.Difference) + ".");
+                }
+            }
+
+            DateTime first = new DateTime(year, month, 1);
+            Report report = BuildReport(ReportPeriod.Month, first);
+            if (report.TotalExpense > report.TotalIncome)
+            {
+                recommendations.Add("Витрати за місяць (" + Money(report.TotalExpense) + ") перевищують доходи ("
+                    + Money(report.TotalIncome) + ") на " + Money(report.TotalExpense - report.TotalIncome) + ".");
+            }
+
+            return recommendations;
+        }
+
+        private string Money(decimal amount)
+        {
+            return amount.ToString("F2", CultureInfo.InvariantCulture);
+        }
+
+        private string Percent(decimal percent)
+        {
+            return percent.ToString("F1", CultureInfo.InvariantCulture) + "%";
+        }
 
         private (DateTime, DateTime) GetRange(ReportPeriod period, DateTime date)
         {
