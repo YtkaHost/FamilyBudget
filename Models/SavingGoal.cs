@@ -8,7 +8,7 @@ namespace FamilyBudget.Models
         private DateTime _deadline;
         private decimal _savedAmount;
 
-        public int Id { get; }
+        public int Id { get; private set; }
 
         public string Name
         {

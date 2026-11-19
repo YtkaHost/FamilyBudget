@@ -4,11 +4,11 @@ namespace FamilyBudget.Models
     {
         private decimal _plannedAmount;
 
-        public int Id { get; }
+        public int Id { get; private set; }
 
-        public Category Category { get; }
-        public int Year { get; }
-        public int Month { get; }
+        public Category Category { get; private set; } = null!;
+        public int Year { get; private set; }
+        public int Month { get; private set; }
 
         public decimal PlannedAmount
         {
@@ -23,6 +23,10 @@ namespace FamilyBudget.Models
 
                 _plannedAmount = value;
             }
+        }
+
+        private BudgetPlan()
+        {
         }
 
         public BudgetPlan(int id, Category category, int year, int month, decimal plannedAmount)

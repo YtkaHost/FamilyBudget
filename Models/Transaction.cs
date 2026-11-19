@@ -8,7 +8,7 @@ namespace FamilyBudget.Models
         private DateTime _date;
         private string _description = "";
 
-        public int Id { get; }
+        public int Id { get; private set; }
 
         public Category Category
         {
@@ -77,6 +77,11 @@ namespace FamilyBudget.Models
                 else
                     _description = value.Trim();
             }
+        }
+
+        // Викликає цей конструктор під час читання операції з бази.
+        private Transaction()
+        {
         }
 
         public Transaction(int id, Category category, User user, decimal amount, DateTime date, string description)

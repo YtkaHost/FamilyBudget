@@ -1,5 +1,6 @@
 using System.Globalization;
 using FamilyBudget.BusinessLogic;
+using FamilyBudget.Integration;
 using FamilyBudget.Models;
 
 namespace FamilyBudget.Presentation
@@ -23,18 +24,62 @@ namespace FamilyBudget.Presentation
         {
             try
             {
-
-                Menu("СІМЕЙНИЙ БЮДЖЕТ", "Вийти",
-                    new[] { "Категорії", "Користувачі", "Операції", "Баланс і звіти", "Плани бюджету", "Цілі накопичення" },
-                    new Action[] { CategoriesMenu, UsersMenu, TransactionsMenu, ReportsMenu, PlansMenu, GoalsMenu },
-                    false);
+                while (Login())
+                {
+                    MainMenu();
+                    _service.Logout();
+                }
             }
             catch (EndOfStreamException)
             {
-                
             }
 
             Console.WriteLine("До побачення!");
+        }
+
+
+        private bool Login()
+        {
+            Console.WriteLine();
+            Console.WriteLine("===== ВХІД (сервіс Security) =====");
+
+            while (true)
+            {
+                string login = ReadLine("Логін (Enter - закрити програму)");
+
+                if (login == "")
+                    return false;
+
+                string password = ReadPassword("Пароль");
+
+                try
+                {
+                    Console.WriteLine("Запит до сервісу Security...");
+                    _service.Login(login, password);
+
+                    if (_service.CurrentUser == null)
+                    {
+                        Console.WriteLine("Ви входите вперше, тож додамо вас до користувачів бюджету.");
+                        _service.CreateLocalUser(ReadRole());
+                    }
+
+                    Console.WriteLine("Ви увійшли як " + _service.CurrentLogin + " (роль " + _service.CurrentApiRole + ").");
+                    return true;
+                }
+                catch (Exception ex) when (ex is not EndOfStreamException)
+                {
+                    Console.WriteLine("Помилка: " + ex.Message);
+                }
+            }
+        }
+
+        private void MainMenu()
+        {
+            Menu("СІМЕЙНИЙ БЮДЖЕТ: " + _service.CurrentLogin + " (" + _service.CurrentApiRole + ")",
+                "Вийти з облікового запису",
+                new[] { "Категорії", "Користувачі", "Операції", "Баланс і звіти", "Плани бюджету", "Цілі накопичення" },
+                new Action[] { CategoriesMenu, UsersMenu, TransactionsMenu, ReportsMenu, PlansMenu, GoalsMenu },
+                false);
         }
 
         private void Menu(string title, string backText, string[] items, Action[] actions, bool pauseAfterAction)
@@ -113,10 +158,21 @@ namespace FamilyBudget.Presentation
 
         private void UsersMenu()
         {
-            Menu("КОРИСТУВАЧІ", "Назад",
-                new[] { "Додати користувача", "Показати користувачів" },
-                new Action[] { AddUser, ShowUsers },
-                true);
+            // Адміністративні пункти приховані від інших користувачів, а права перевіряє API.
+            var items = new List<string> { "Показати користувачів бюджету", "Змінити свій пароль" };
+            var actions = new List<Action> { ShowUsers, ChangeOwnPassword };
+
+            if (_service.IsAdmin)
+            {
+                items.Add("Показати користувачів");
+                actions.Add(ShowApiUsers);
+                items.Add("Створити користувача");
+                actions.Add(RegisterUser);
+                items.Add("Змінити роль користувача");
+                actions.Add(SetUserRole);
+            }
+
+            Menu("КОРИСТУВАЧІ", "Назад", items.ToArray(), actions.ToArray(), true);
         }
 
         private void TransactionsMenu()
@@ -140,7 +196,7 @@ namespace FamilyBudget.Presentation
         {
             Menu("ПЛАНИ БЮДЖЕТУ", "Назад",
                 new[] { "Додати план", "Показати плани", "Змінити суму плану", "Видалити план",
-                        "План і факт за місяць" },
+                        "План і факт за місяць (з рекомендаціями)" },
                 new Action[] { AddPlan, ShowPlans, EditPlan, DeletePlan, ShowPlanVsActual },
                 true);
         }
@@ -230,15 +286,60 @@ namespace FamilyBudget.Presentation
                 WriteLineColor($"{c.Id,2}  {TypeToText(c.Type),-8} {c.Name}", ColorFor(c.Type));
         }
 
-        // ---------- Користувачі ----------
 
-        private void AddUser()
+        private void ShowApiUsers()
         {
-            string name = ReadText("Ім'я");
-            FamilyRole role = ReadRole();
+            Console.WriteLine("Запит до сервісу Security...");
+            List<ApiUser> users = _service.GetApiUsers();
 
-            User user = _service.AddUser(name, role);
-            Console.WriteLine("Користувача додано (Id = " + user.Id + ").");
+            if (users.Count == 0)
+            {
+                Console.WriteLine("Користувачів на сервері немає.");
+                return;
+            }
+
+            Console.WriteLine("Логін            Роль");
+            foreach (ApiUser u in users)
+                Console.WriteLine($"{u.UserName,-16} {u.Role}");
+        }
+
+        private void RegisterUser()
+        {
+            string login = ReadText("Логін нового користувача");
+            string password = ReadPassword("Пароль");
+            string role = ReadText("Роль на сервері (наприклад, Admin або Member)");
+            FamilyRole familyRole = ReadRole();
+
+            Console.WriteLine("Запит до сервісу Security...");
+            User user = _service.RegisterUser(login, password, role, familyRole);
+            Console.WriteLine("Користувача створено на сервері і додано до користувачів бюджету (Id = " + user.Id + ").");
+        }
+
+        private void SetUserRole()
+        {
+            string login = ReadText("Логін користувача");
+            string role = ReadText("Нова роль");
+
+            Console.WriteLine("Запит до сервісу Security...");
+            _service.SetUserRole(login, role);
+            Console.WriteLine("Роль користувача " + login + " змінено на " + role + ".");
+        }
+
+        private void ChangeOwnPassword()
+        {
+            string oldPassword = ReadPassword("Поточний пароль");
+            string newPassword = ReadPassword("Новий пароль");
+            string repeat = ReadPassword("Новий пароль ще раз");
+
+            if (newPassword != repeat)
+            {
+                Console.WriteLine("Паролі не збігаються, пароль не змінено.");
+                return;
+            }
+
+            Console.WriteLine("Запит до сервісу Security...");
+            _service.ChangeOwnPassword(oldPassword, newPassword);
+            Console.WriteLine("Пароль змінено.");
         }
 
         private void ShowUsers()
@@ -278,7 +379,7 @@ namespace FamilyBudget.Presentation
             int categoryId = ReadNumber("Id категорії", 1, int.MaxValue);
 
             PrintUsers(users);
-            int userId = ReadNumber("Id користувача", 1, int.MaxValue);
+            int userId = ReadUserId();
 
             decimal amount = ReadAmount("Сума");
             DateTime date = ReadDate("Дата", DateTime.Today);
@@ -499,9 +600,9 @@ namespace FamilyBudget.Presentation
                 WriteLineColor($"{s.CategoryName,-15} {Money(s.Amount),10} {Percent(s.Percent),7}", color);
         }
 
+
         private void AddPlan()
         {
-            // План складається лише для витрат, тому показуємо тільки категорії витрат
             List<Category> categories = _service.GetCategories(TransactionType.Expense);
 
             if (categories.Count == 0)
@@ -565,7 +666,7 @@ namespace FamilyBudget.Presentation
 
             PrintPlans(plans);
             int id = ReadNumber("Id плану, який видалити", 1, int.MaxValue);
-            _service.GetPlan(id);   // якщо Id не існує - тут буде помилка
+            _service.GetPlan(id);
 
             if (!Confirm("Видалити план?"))
             {
@@ -742,6 +843,70 @@ namespace FamilyBudget.Presentation
             return line.Trim();
         }
 
+        private string ReadPassword(string prompt)
+        {
+            Console.Write(prompt + ": ");
+
+            // Не обрізаємо пароль: пробіли можуть бути його частиною; у перенаправленому вводі маскування немає.
+            if (Console.IsInputRedirected)
+            {
+                string? line = Console.ReadLine();
+
+                if (line == null)
+                    throw new EndOfStreamException();
+
+                return line;
+            }
+
+            var password = new System.Text.StringBuilder();
+
+            while (true)
+            {
+                ConsoleKeyInfo key = Console.ReadKey(true);
+
+                if (key.Key == ConsoleKey.Enter)
+                {
+                    Console.WriteLine();
+                    return password.ToString();
+                }
+
+                if (key.Key == ConsoleKey.Backspace)
+                {
+                    if (password.Length > 0)
+                    {
+                        password.Length--;
+                        Console.Write("\b \b");
+                    }
+                }
+                else if (!char.IsControl(key.KeyChar))
+                {
+                    password.Append(key.KeyChar);
+                    Console.Write("*");
+                }
+            }
+        }
+
+        private int ReadUserId()
+        {
+            User? me = _service.CurrentUser;
+
+            if (me == null)
+                return ReadNumber("Id користувача", 1, int.MaxValue);
+
+            while (true)
+            {
+                string text = ReadLine("Id користувача (Enter - ви, " + me.Name + ")");
+
+                if (text == "")
+                    return me.Id;
+
+                if (int.TryParse(text, out int id) && id >= 1)
+                    return id;
+
+                Console.WriteLine("Введіть ціле число більше 0 або натисніть Enter.");
+            }
+        }
+
         private string ReadText(string prompt)
         {
             string text = ReadLine(prompt);
@@ -880,7 +1045,6 @@ namespace FamilyBudget.Presentation
             return answer == "т" || answer == "y" || answer == "так";
         }
 
-        // ---------- Текст для виводу ----------
 
         private string TypeToText(TransactionType type)
         {

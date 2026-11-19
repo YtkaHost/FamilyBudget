@@ -1,154 +1,165 @@
+using FamilyBudget.Integration;
 using FamilyBudget.Models;
+using Microsoft.EntityFrameworkCore;
 
 namespace FamilyBudget.Persistence
 {
     public class BudgetStorage
     {
-        private readonly List<Category> _categories = new List<Category>();
-        private readonly List<User> _users = new List<User>();
-        private readonly List<Transaction> _transactions = new List<Transaction>();
-        private readonly List<BudgetPlan> _plans = new List<BudgetPlan>();
-        private readonly List<SavingGoal> _goals = new List<SavingGoal>();
+        private readonly BudgetDbContext _db;
 
-        // ---------- Категорії ----------
+        public BudgetStorage(BudgetDbContext db)
+        {
+            _db = db;
+        }
+
 
         public List<Category> GetAllCategories()
         {
-            return new List<Category>(_categories);
+            return _db.Categories.ToList();
         }
 
         public void AddCategory(Category category)
         {
-            _categories.Add(category);
+            _db.Categories.Add(category);
         }
 
         public void RemoveCategory(Category category)
         {
-            _categories.Remove(category);
+            _db.Categories.Remove(category);
         }
 
         public int GetNextCategoryId()
         {
-            if (_categories.Count == 0)
+            if (!_db.Categories.Any())
                 return 1;
 
-            return _categories.Max(c => c.Id) + 1;
+            return _db.Categories.Max(c => c.Id) + 1;
         }
 
-        // ---------- Користувачі ----------
 
         public List<User> GetAllUsers()
         {
-            return new List<User>(_users);
+            return _db.Users.ToList();
         }
 
         public void AddUser(User user)
         {
-            _users.Add(user);
+            _db.Users.Add(user);
         }
 
         public int GetNextUserId()
         {
-            if (_users.Count == 0)
+            if (!_db.Users.Any())
                 return 1;
 
-            return _users.Max(u => u.Id) + 1;
+            return _db.Users.Max(u => u.Id) + 1;
         }
 
-        // ---------- Операції ----------
 
         public List<Transaction> GetAllTransactions()
         {
-            return new List<Transaction>(_transactions);
+            return _db.Transactions
+                .Include(t => t.Category)
+                .Include(t => t.User)
+                .ToList();
         }
 
         public void AddTransaction(Transaction transaction)
         {
-            _transactions.Add(transaction);
+            _db.Transactions.Add(transaction);
         }
 
         public void RemoveTransaction(Transaction transaction)
         {
-            _transactions.Remove(transaction);
+            _db.Transactions.Remove(transaction);
         }
 
-        // Замінює операцію на нову версію з тим самим Id
         public void ReplaceTransaction(Transaction updated)
         {
-            int index = _transactions.FindIndex(t => t.Id == updated.Id);
-            if (index < 0)
+            Transaction? old = _db.Transactions.Find(updated.Id);
+            if (old == null)
                 throw new InvalidOperationException("Операцію з Id " + updated.Id + " не знайдено.");
 
-            _transactions[index] = updated;
+            old.Category = updated.Category;
+            old.User = updated.User;
+            old.Amount = updated.Amount;
+            old.Date = updated.Date;
+            old.Description = updated.Description;
         }
 
         public int GetNextTransactionId()
         {
-            if (_transactions.Count == 0)
+            if (!_db.Transactions.Any())
                 return 1;
 
-            return _transactions.Max(t => t.Id) + 1;
+            return _db.Transactions.Max(t => t.Id) + 1;
         }
 
-        // ---------- Плани бюджету ----------
 
         public List<BudgetPlan> GetAllPlans()
         {
-            return new List<BudgetPlan>(_plans);
+            return _db.BudgetPlans
+                .Include(p => p.Category)
+                .ToList();
         }
 
         public void AddPlan(BudgetPlan plan)
         {
-            _plans.Add(plan);
+            _db.BudgetPlans.Add(plan);
         }
 
         public void RemovePlan(BudgetPlan plan)
         {
-            _plans.Remove(plan);
+            _db.BudgetPlans.Remove(plan);
         }
 
         public int GetNextPlanId()
         {
-            if (_plans.Count == 0)
+            if (!_db.BudgetPlans.Any())
                 return 1;
 
-            return _plans.Max(p => p.Id) + 1;
+            return _db.BudgetPlans.Max(p => p.Id) + 1;
         }
 
-        // ---------- Цілі накопичення ----------
 
         public List<SavingGoal> GetAllGoals()
         {
-            return new List<SavingGoal>(_goals);
+            return _db.SavingGoals.ToList();
         }
 
         public void AddGoal(SavingGoal goal)
         {
-            _goals.Add(goal);
+            _db.SavingGoals.Add(goal);
         }
 
         public void RemoveGoal(SavingGoal goal)
         {
-            _goals.Remove(goal);
+            _db.SavingGoals.Remove(goal);
         }
 
         public int GetNextGoalId()
         {
-            if (_goals.Count == 0)
+            if (!_db.SavingGoals.Any())
                 return 1;
 
-            return _goals.Max(g => g.Id) + 1;
+            return _db.SavingGoals.Max(g => g.Id) + 1;
         }
 
-        // ---------- Очищення ----------
 
-        public void Clear()
+        public void SaveChanges()
         {
-            _categories.Clear();
-            _users.Clear();
-            _transactions.Clear();
-            _plans.Clear();
-            _goals.Clear();
+            try
+            {
+                _db.SaveChanges();
+            }
+            catch (DbUpdateException ex)
+            {
+                _db.ChangeTracker.Clear();
+
+                string reason = ex.InnerException != null ? ex.InnerException.Message : ex.Message;
+                throw new InvalidOperationException("Зміну не збережено: не вдалося записати в базу даних (" + reason + ").");
+            }
         }
     }
 }

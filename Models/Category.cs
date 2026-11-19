@@ -4,9 +4,9 @@ namespace FamilyBudget.Models
     {
         private string _name = "";
 
-        public int Id { get; }
+        public int Id { get; private set; }
 
-        public TransactionType Type { get; }
+        public TransactionType Type { get; private set; }
 
         public string Name
         {

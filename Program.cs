@@ -1,35 +1,53 @@
 using System.Text;
 using FamilyBudget.BusinessLogic;
+using FamilyBudget.Integration;
 using FamilyBudget.Persistence;
 using FamilyBudget.Presentation;
 
 Console.OutputEncoding = Encoding.UTF8;
 Console.InputEncoding = Encoding.UTF8;
 
-const string FilePath = "budget.json";
-var storage = new BudgetStorage();
-var fileStorage = new JsonFileStorage(FilePath);
-var service = new BudgetService(storage, fileStorage);
+// Шлях відносний до каталогу, з якого запущено програму.
+const string DatabasePath = "budget.db";
+
+using var db = new BudgetDbContext(DatabasePath);
+var storage = new BudgetStorage(db);
+// Віддалений API Security 
+string apiUrl = Environment.GetEnvironmentVariable("SECURITY_API_URL") ?? SecurityApiClient.DefaultUrl;
+SecurityApiClient apiClient;
+
+try
+{
+    apiClient = new SecurityApiClient(apiUrl);
+}
+catch (UriFormatException)
+{
+    Console.WriteLine("Некоректна адреса сервісу Security: " + apiUrl);
+    return;
+}
+
+var service = new BudgetService(storage, apiClient);
 var reports = new ReportService(service);
 var menu = new ConsoleMenu(service, reports);
 
 try
 {
-    service.Load();
+    db.Database.EnsureCreated();
+
+    Console.WriteLine("База даних: " + Path.GetFullPath(DatabasePath));
+    Console.WriteLine("Сервіс Security: " + apiClient.BaseUrl);
+    Console.WriteLine("Записів у базі: категорій - " + service.GetCategories().Count
+        + ", користувачів - " + service.GetUsers().Count
+        + ", операцій - " + service.GetTransactions().Count
+        + ", планів - " + service.GetPlans().Count
+        + ", цілей - " + service.GetSavingGoals().Count);
 }
 catch (Exception ex)
 {
-    Console.WriteLine("Не вдалося прочитати файл " + Path.GetFullPath(FilePath));
+    Console.WriteLine("Не вдалося відкрити базу даних " + Path.GetFullPath(DatabasePath));
     Console.WriteLine("Причина: " + ex.Message);
-    Console.WriteLine("Програму зупинено, щоб не втратити дані. Виправте файл або видаліть його.");
+    Console.WriteLine("Програму зупинено. Перевірте файл бази або видаліть його: програма створить нову порожню базу.");
     return;
 }
-
-Console.WriteLine("Файл даних: " + Path.GetFullPath(FilePath));
-Console.WriteLine("Завантажено: категорій - " + service.GetCategories().Count
-    + ", користувачів - " + service.GetUsers().Count
-    + ", операцій - " + service.GetTransactions().Count
-    + ", планів - " + service.GetPlans().Count
-    + ", цілей - " + service.GetSavingGoals().Count);
 
 menu.Run();

@@ -1,3 +1,4 @@
+using FamilyBudget.Integration;
 using FamilyBudget.Models;
 using FamilyBudget.Persistence;
 
@@ -6,20 +7,123 @@ namespace FamilyBudget.BusinessLogic
     public class BudgetService
     {
         private readonly BudgetStorage _storage;
-        private readonly JsonFileStorage _fileStorage;
+        private readonly SecurityApiClient _api;
 
-        public BudgetService(BudgetStorage storage, JsonFileStorage fileStorage)
+        private const string AdminRole = "Admin";
+
+        // Токен Security зберігається лише в пам'яті на час роботи програми.
+        private string? _token;
+
+        public BudgetService(BudgetStorage storage, SecurityApiClient api)
         {
             _storage = storage;
-            _fileStorage = fileStorage;
+            _api = api;
         }
 
-        public void Load()
+
+        public string? CurrentLogin { get; private set; }
+
+        public string? CurrentApiRole { get; private set; }
+
+        public User? CurrentUser { get; private set; }
+
+        public bool IsLoggedIn => _token != null;
+
+        public bool IsAdmin => CurrentApiRole == AdminRole;
+
+        public void Login(string username, string password)
         {
-            _fileStorage.Load(_storage);
+            if (string.IsNullOrWhiteSpace(username))
+                throw new ArgumentException("Логін не може бути порожнім.");
+            if (password == "")
+                throw new ArgumentException("Пароль не може бути порожнім.");
+
+            LoginResult result = _api.Login(username.Trim(), password);
+
+            _token = result.Token;
+            CurrentLogin = username.Trim();
+            CurrentApiRole = result.Role;
+            CurrentUser = FindLocalUser(CurrentLogin);
         }
 
-        // ---------- Категорії ----------
+        public void Logout()
+        {
+            _token = null;
+            CurrentLogin = null;
+            CurrentApiRole = null;
+            CurrentUser = null;
+        }
+
+        public User CreateLocalUser(FamilyRole familyRole)
+        {
+            if (CurrentLogin == null)
+                throw new InvalidOperationException("Спочатку потрібно увійти в систему.");
+
+            CurrentUser = AddUser(CurrentLogin, familyRole);
+            return CurrentUser;
+        }
+
+        public List<ApiUser> GetApiUsers()
+        {
+            return _api.GetUsers(RequireAdminToken("переглядати користувачів сервісу"));
+        }
+
+        public User RegisterUser(string username, string password, string role, FamilyRole familyRole)
+        {
+            string token = RequireAdminToken("створювати користувачів");
+
+            if (string.IsNullOrWhiteSpace(username))
+                throw new ArgumentException("Логін не може бути порожнім.");
+            if (password == "")
+                throw new ArgumentException("Пароль не може бути порожнім.");
+            if (string.IsNullOrWhiteSpace(role))
+                throw new ArgumentException("Роль не може бути порожньою.");
+
+            _api.Register(token, username.Trim(), password, role.Trim());
+
+            return FindLocalUser(username.Trim()) ?? AddUser(username.Trim(), familyRole);
+        }
+
+        public void SetUserRole(string username, string role)
+        {
+            string token = RequireAdminToken("змінювати ролі");
+
+            if (string.IsNullOrWhiteSpace(username))
+                throw new ArgumentException("Логін не може бути порожнім.");
+            if (string.IsNullOrWhiteSpace(role))
+                throw new ArgumentException("Роль не може бути порожньою.");
+
+            _api.SetRole(token, username.Trim(), role.Trim());
+
+            if (string.Equals(username.Trim(), CurrentLogin, StringComparison.OrdinalIgnoreCase))
+                CurrentApiRole = role.Trim();
+        }
+
+        public void ChangeOwnPassword(string oldPassword, string newPassword)
+        {
+            if (_token == null)
+                throw new InvalidOperationException("Спочатку потрібно увійти в систему.");
+            if (oldPassword == "" || newPassword == "")
+                throw new ArgumentException("Пароль не може бути порожнім.");
+
+            _api.ChangePassword(_token, oldPassword, newPassword);
+        }
+
+        private User? FindLocalUser(string name)
+        {
+            return _storage.GetAllUsers().FirstOrDefault(u => string.Equals(u.Name, name, StringComparison.OrdinalIgnoreCase));
+        }
+
+        private string RequireAdminToken(string action)
+        {
+            if (_token == null)
+                throw new InvalidOperationException("Спочатку потрібно увійти в систему.");
+            if (!IsAdmin)
+                throw new InvalidOperationException("Недостатньо прав: " + action + " може лише користувач з роллю " + AdminRole + ".");
+
+            return _token;
+        }
+
 
         public Category AddCategory(string name, TransactionType type)
         {
@@ -265,7 +369,7 @@ namespace FamilyBudget.BusinessLogic
 
             if (categoryId != null)
             {
-                GetCategory(categoryId.Value);   // якщо такої категорії немає - помилка, а не порожній результат
+                GetCategory(categoryId.Value);
                 result = result.Where(t => t.Category.Id == categoryId.Value).ToList();
             }
 
@@ -306,17 +410,11 @@ namespace FamilyBudget.BusinessLogic
             return GetTotalIncome() - GetTotalExpense();
         }
 
-        // Викликається в кінці кожного методу, що змінює дані
+
         private void SaveChanges()
         {
-            try
-            {
-                _fileStorage.Save(_storage);
-            }
-            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
-            {
-                throw new InvalidOperationException("Зміну виконано, але зберегти файл не вдалося: " + ex.Message);
-            }
+            // Усі зміни зберігаються тут; у разі помилки сховище скасовує незбережений стан EF.
+            _storage.SaveChanges();
         }
     }
 }

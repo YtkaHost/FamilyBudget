@@ -6,7 +6,7 @@ namespace FamilyBudget.Models
         private string _name = "";
         private FamilyRole _familyRole;
 
-        public int Id { get; }
+        public int Id { get; private set; }
 
         public string Name
         {
